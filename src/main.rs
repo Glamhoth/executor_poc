@@ -4,16 +4,18 @@
 mod rtos;
 mod tasks;
 
-extern crate atsamx7x_hal as hal;
-extern crate panic_semihosting;
+use panic_halt as _;
+
+// extern crate atsamx7x_hal as hal;
+// extern crate panic_semihosting;
 
 use cortex_m::asm::sev;
-use cortex_m::peripheral::syst::SystClkSource;
+use cortex_m::peripheral::{syst::SystClkSource, SYST};
 use cortex_m_rt::entry;
 use cortex_m_rt::exception;
 use cortex_m_semihosting::debug;
-use hal::ehal::watchdog::WatchdogDisable;
-use hal::target_device;
+// use hal::ehal::watchdog::WatchdogDisable;
+// use hal::target_device;
 
 use crate::rtos::executor::Executor;
 use crate::rtos::task::TaskState;
@@ -21,12 +23,14 @@ use crate::tasks::mytasks::MyTasks;
 use crate::tasks::taska::TaskA;
 use crate::tasks::taskb::TaskB;
 
+static mut system_time: u64 = 0;
+
 #[entry]
 fn main() -> ! {
     {
-        let peripherals = target_device::Peripherals::take().unwrap();
-        let wdt = peripherals.WDT;
-        hal::watchdog::Watchdog::new(wdt).disable();
+        // let peripherals = target_device::Peripherals::take().unwrap();
+        // let wdt = peripherals.WDT;
+        // hal::watchdog::Watchdog::new(wdt).disable();
     }
 
     {
@@ -42,7 +46,7 @@ fn main() -> ! {
     let task_a = MyTasks::TaskA(TaskA::new(TaskState::Ready));
     let task_b = MyTasks::TaskB(TaskB::new(TaskState::Ready));
 
-    let mut executor = Executor::new([task_a, task_b]);
+    let mut executor = Executor::new([task_a, task_b], unsafe { &system_time });
     executor.run_next_task();
 
     debug::exit(debug::EXIT_SUCCESS);
@@ -52,5 +56,6 @@ fn main() -> ! {
 
 #[exception]
 fn SysTick() {
+    unsafe { system_time.wrapping_add(SYST::get_current() as u64) };
     sev();
 }
