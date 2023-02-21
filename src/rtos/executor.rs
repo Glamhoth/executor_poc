@@ -47,12 +47,12 @@ where
                 task
             });
 
-            // match next_task {
-            //     Some(mut task) => {
-            //         let task_state = task.dispatch();
-            //     }
-            //     None => (),
-            // }
+            match next_task {
+                Some(mut task) => {
+                    let task_state = task.dispatch();
+                }
+                None => (),
+            }
 
             wfe();
         }
