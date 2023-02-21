@@ -1,21 +1,29 @@
 #![no_std]
 #![no_main]
+#![feature(type_alias_impl_trait)]
 
+extern crate atsamx7x_hal as hal;
 extern crate cortex_m;
-#[macro_use]
 extern crate cortex_m_rt;
 extern crate cortex_m_semihosting;
 extern crate panic_semihosting;
 
 use core::fmt::Write;
 use cortex_m::peripheral::syst::SystClkSource;
-use cortex_m_rt::{entry, ExceptionFrame};
-use cortex_m_semihosting::{hprintln};
+use cortex_m_rt::{entry, exception, ExceptionFrame};
 use cortex_m_semihosting::hio::{self};
+use hal::target_device;
+
+use hal::ehal::watchdog::WatchdogDisable;
 
 #[entry]
 fn main() -> ! {
-    hprintln!("Hello, World!").unwrap();
+    let peripherals = target_device::Peripherals::take().unwrap();
+    let wdt = peripherals.WDT;
+    hal::watchdog::Watchdog::new(wdt).disable();
+
+    let mut stdout = hio::hstdout().unwrap();
+    write!(stdout, "Hello, World!").unwrap();
 
     let p = cortex_m::Peripherals::take().unwrap();
 
@@ -25,8 +33,7 @@ fn main() -> ! {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    loop {
-    }
+    loop {}
 }
 
 #[exception]
@@ -36,11 +43,11 @@ fn SysTick() {
 }
 
 #[exception]
-fn HardFault(ef: &ExceptionFrame) -> ! {
+unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
     panic!("HardFault at {:#?}", ef);
 }
 
 #[exception]
-fn DefaultHandler(irqn: i16) {
+unsafe fn DefaultHandler(irqn: i16) {
     panic!("Unhandled exception (IRQn = {})", irqn);
 }
