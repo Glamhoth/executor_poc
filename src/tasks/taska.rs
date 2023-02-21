@@ -19,7 +19,7 @@ impl Task for TaskA {
     }
 
     fn step(&mut self) -> TaskState {
-        hprintln!("Hello, TaskA!").unwrap();
+        hprintln!("Hello, TaskA!");
         TaskState::Blocked
     }
 }

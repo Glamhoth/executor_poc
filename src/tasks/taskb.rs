@@ -19,7 +19,7 @@ impl Task for TaskB {
     }
 
     fn step(&mut self) -> TaskState {
-        hprintln!("Hello, TaskB!").unwrap();
+        hprintln!("Hello, TaskB!");
         TaskState::Ready
     }
 }
