@@ -1,11 +1,13 @@
 use core::cmp::Ordering;
 
+use cortex_m_semihosting::hprintln;
+
 use crate::rtos::task::{Task, TaskState};
 use crate::rtos::tasklist::TaskList;
 use crate::tasks::taska::TaskA;
 use crate::tasks::taskb::TaskB;
 
-#[derive(Debug, Eq, Ord)]
+#[derive(Debug, Eq)]
 pub enum MyTasks {
     TaskA(TaskA),
     TaskB(TaskB),
@@ -48,37 +50,40 @@ impl TaskList for MyTasks {
     }
 }
 
-impl<'a> PartialOrd for MyTasks {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+impl<'a> Ord for MyTasks {
+    fn cmp(&self, other: &Self) -> Ordering {
         let self_state = self.get_state();
         let other_state = other.get_state();
 
         match (self_state, other_state) {
-            // (TaskState::Ready, TaskState::Ready) => Some(Ordering::Equal),
-            (TaskState::Ready, TaskState::Running) => return Some(Ordering::Greater),
-            (TaskState::Ready, TaskState::Blocked) => return Some(Ordering::Greater),
-            (TaskState::Running, TaskState::Ready) => return Some(Ordering::Less),
-            // (TaskState::Running, TaskState::Running) => Some(Ordering::Equal),
-            // (TaskState::Running, TaskState::Blocked) => Some(Ordering::Equal),
-            (TaskState::Blocked, TaskState::Ready) => return Some(Ordering::Less),
-            // (TaskState::Blocked, TaskState::Running) => Some(Ordering::Equal),
-            // (TaskState::Blocked, TaskState::Blocked) => Some(Ordering::Equal),
-            (_, _) => None::<Ordering>,
+            (TaskState::Ready, TaskState::Running) => return Ordering::Less,
+            (TaskState::Ready, TaskState::Blocked) => return Ordering::Greater,
+            (TaskState::Running, TaskState::Ready) => return Ordering::Greater,
+            (TaskState::Blocked, TaskState::Ready) => return Ordering::Less,
+            (_, _) => (),
         };
 
         let self_last_running_time = self.get_last_running_time();
         let other_last_running_time = other.get_last_running_time();
 
         if self_last_running_time > other_last_running_time {
-            return Some(Ordering::Less);
+            return Ordering::Less;
         } else {
-            return Some(Ordering::Greater);
+            return Ordering::Greater;
         }
+    }
+}
+
+impl<'a> PartialOrd for MyTasks {
+    fn partial_cmp(&self, _: &Self) -> Option<Ordering> {
+        hprintln!("PORD");
+        todo!();
     }
 }
 
 impl<'a> PartialEq for MyTasks {
     fn eq(&self, _: &Self) -> bool {
-        false
+        hprintln!("EQ");
+        todo!();
     }
 }

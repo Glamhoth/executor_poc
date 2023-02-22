@@ -33,6 +33,6 @@ impl Task for TaskA {
 
     fn step(&mut self) -> TaskState {
         hprintln!("Hello, TaskA!");
-        TaskState::Blocked
+        TaskState::Ready
     }
 }

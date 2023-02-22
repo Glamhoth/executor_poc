@@ -4,13 +4,13 @@
 mod rtos;
 mod tasks;
 
-use panic_halt as _;
+// use panic_halt as _;
 
 // extern crate atsamx7x_hal as hal;
-// extern crate panic_semihosting;
+extern crate panic_semihosting;
 
 use cortex_m::asm::sev;
-use cortex_m::peripheral::{syst::SystClkSource, SYST};
+use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m_rt::entry;
 use cortex_m_rt::exception;
 use cortex_m_semihosting::debug;
@@ -23,7 +23,7 @@ use crate::tasks::mytasks::MyTasks;
 use crate::tasks::taska::TaskA;
 use crate::tasks::taskb::TaskB;
 
-static mut system_time: u64 = 0;
+static mut SYSTEM_TIME: u64 = 0;
 
 #[entry]
 fn main() -> ! {
@@ -46,7 +46,7 @@ fn main() -> ! {
     let task_a = MyTasks::TaskA(TaskA::new(TaskState::Ready));
     let task_b = MyTasks::TaskB(TaskB::new(TaskState::Ready));
 
-    let mut executor = Executor::new([task_a, task_b], unsafe { &system_time });
+    let mut executor = Executor::new([task_a, task_b], unsafe { &SYSTEM_TIME });
     executor.run_next_task();
 
     debug::exit(debug::EXIT_SUCCESS);
@@ -56,6 +56,8 @@ fn main() -> ! {
 
 #[exception]
 fn SysTick() {
-    unsafe { system_time.wrapping_add(SYST::get_current() as u64) };
+    // unsafe { SYSTEM_TIME.wrapping_add(SYST::get_current() as u64) };
+    unsafe { SYSTEM_TIME += 1 as u64 };
+
     sev();
 }

@@ -35,17 +35,21 @@ where
             let current_time = { *self.system_time };
 
             let next_task = interrupt::free(|_| {
-                let task = self.tasks.peek_mut();
+                let task = self.tasks.pop();
                 task
             });
 
             match next_task {
                 Some(mut task) => {
-                    // task.set_state(TaskState::Running);
-                    // task.set_last_running_time(current_time);
+                    if *task.get_state() == TaskState::Ready {
+                        task.set_state(TaskState::Running);
+                        task.set_last_running_time(current_time);
 
-                    let task_state = task.dispatch();
-                    // task.set_state(task_state);
+                        let task_state = task.dispatch();
+                        task.set_state(task_state);
+
+                        self.tasks.push(task).expect("Task queue full");
+                    }
                 }
                 None => (),
             }
