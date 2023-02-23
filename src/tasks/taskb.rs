@@ -11,9 +11,9 @@ pub struct TaskB {
 }
 
 impl TaskB {
-    pub fn new(state: TaskState) -> Self {
+    pub const fn new() -> Self {
         TaskB {
-            state,
+            state: TaskState::Ready,
             last_running_time: 0,
         }
     }

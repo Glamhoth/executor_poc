@@ -1,7 +1,7 @@
+use crate::rtos::cell::ThinCell;
 use crate::rtos::task::TaskState;
 use crate::rtos::tasklist::TaskList;
 
-use cortex_m::asm::wfe;
 use heapless::binary_heap::{BinaryHeap, Max};
 
 type TaskArray<T, const TASK_COUNT: usize> = [T; TASK_COUNT];
@@ -11,44 +11,48 @@ pub struct Executor<TL, const TASK_COUNT: usize>
 where
     TL: TaskList + 'static,
 {
-    tasks: TaskQueue<TL, TASK_COUNT>,
     system_time: &'static u64,
+    task_queue: TaskQueue<&'static ThinCell<TL>, TASK_COUNT>,
 }
 
 impl<TL, const TASK_COUNT: usize> Executor<TL, TASK_COUNT>
 where
     TL: TaskList + core::cmp::Ord + core::fmt::Debug,
 {
-    pub fn new(defined_tasks: TaskArray<TL, TASK_COUNT>, system_time: &'static u64) -> Self {
-        let mut tasks = BinaryHeap::new();
+    pub fn new(system_time: &'static u64) -> Self {
+        let task_queue = BinaryHeap::new();
 
-        for task in defined_tasks {
-            tasks.push(task).expect("Task queue full");
+        Executor {
+            system_time,
+            task_queue,
         }
+    }
 
-        Executor { tasks, system_time }
+    pub fn register_task(&mut self, task: &'static ThinCell<TL>) {
+        self.task_queue.push(task).expect("Task queue is full");
     }
 
     pub fn run_next_task(&mut self) {
         loop {
             let current_time = { *self.system_time };
 
-            let next_task = self.tasks.peek_mut();
+            let next_task = self.task_queue.pop();
 
             match next_task {
-                Some(mut task) => {
-                    if *task.get_state() == TaskState::Ready {
-                        task.set_state(TaskState::Running);
-                        task.set_last_running_time(current_time);
+                Some(task) => {
+                    let mut ready_task = unsafe { task.as_ref_mut() };
 
-                        let task_state = task.dispatch();
-                        task.set_state(task_state);
+                    if *ready_task.get_state() == TaskState::Ready {
+                        ready_task.set_last_running_time(current_time);
+
+                        let task_state = ready_task.dispatch();
+                        ready_task.set_state(task_state);
                     }
+
+                    self.task_queue.push(task);
                 }
                 None => (),
             }
-
-            wfe();
         }
     }
 }

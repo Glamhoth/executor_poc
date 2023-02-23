@@ -1,4 +1,5 @@
 use core::cmp::Ordering;
+use core::fmt::{Debug, Error, Formatter};
 
 use cortex_m_semihosting::hprintln;
 
@@ -7,7 +8,6 @@ use crate::rtos::tasklist::TaskList;
 use crate::tasks::taska::TaskA;
 use crate::tasks::taskb::TaskB;
 
-#[derive(Debug, Eq)]
 pub enum MyTasks {
     TaskA(TaskA),
     TaskB(TaskB),
@@ -50,6 +50,13 @@ impl TaskList for MyTasks {
     }
 }
 
+impl<'a> Debug for MyTasks {
+    fn fmt(&self, _: &mut Formatter) -> Result<(), Error> {
+        hprintln!("FMT");
+        todo!();
+    }
+}
+
 impl<'a> Ord for MyTasks {
     fn cmp(&self, other: &Self) -> Ordering {
         let self_state = self.get_state();
@@ -80,6 +87,8 @@ impl<'a> PartialOrd for MyTasks {
         todo!();
     }
 }
+
+impl<'a> Eq for MyTasks {}
 
 impl<'a> PartialEq for MyTasks {
     fn eq(&self, _: &Self) -> bool {
