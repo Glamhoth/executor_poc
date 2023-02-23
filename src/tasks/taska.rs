@@ -1,6 +1,8 @@
-use crate::rtos::task::{Task, TaskState};
+use core::fmt::Write;
 
-use cortex_m_semihosting::hprintln;
+use cortex_m_semihosting::hio;
+
+use crate::rtos::task::{Task, TaskState};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TaskA {
@@ -10,7 +12,10 @@ pub struct TaskA {
 
 impl TaskA {
     pub fn new(state: TaskState) -> Self {
-        TaskA { state, last_running_time: 0 }
+        TaskA {
+            state,
+            last_running_time: 0,
+        }
     }
 }
 
@@ -32,7 +37,8 @@ impl Task for TaskA {
     }
 
     fn step(&mut self) -> TaskState {
-        hprintln!("Hello, TaskA!");
+        let mut stdout = hio::hstdout().unwrap();
+        stdout.write_str("Hello, TaskA!\n").unwrap();
         TaskState::Ready
     }
 }

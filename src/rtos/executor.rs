@@ -2,7 +2,6 @@ use crate::rtos::task::TaskState;
 use crate::rtos::tasklist::TaskList;
 
 use cortex_m::asm::wfe;
-use cortex_m::interrupt;
 use heapless::binary_heap::{BinaryHeap, Max};
 
 type TaskArray<T, const TASK_COUNT: usize> = [T; TASK_COUNT];
@@ -34,10 +33,7 @@ where
         loop {
             let current_time = { *self.system_time };
 
-            let next_task = interrupt::free(|_| {
-                let task = self.tasks.pop();
-                task
-            });
+            let next_task = self.tasks.peek_mut();
 
             match next_task {
                 Some(mut task) => {
@@ -47,8 +43,6 @@ where
 
                         let task_state = task.dispatch();
                         task.set_state(task_state);
-
-                        self.tasks.push(task).expect("Task queue full");
                     }
                 }
                 None => (),
