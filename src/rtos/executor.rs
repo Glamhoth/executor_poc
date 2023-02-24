@@ -1,7 +1,8 @@
-use crate::rtos::cell::ThinCell;
+use crate::rtos::cell::SafeCell;
 use crate::rtos::task::TaskState;
 use crate::rtos::tasklist::TaskList;
 
+use cortex_m_semihosting::hprintln;
 use heapless::binary_heap::{BinaryHeap, Max};
 
 type TaskArray<T, const TASK_COUNT: usize> = [T; TASK_COUNT];
@@ -11,45 +12,49 @@ pub struct Executor<TL, const TASK_COUNT: usize>
 where
     TL: TaskList + 'static,
 {
-    system_time: &'static u64,
-    task_queue: TaskQueue<&'static ThinCell<TL>, TASK_COUNT>,
+    system_time: SafeCell<u64>,
+    task_queue: SafeCell<TaskQueue<&'static TL, TASK_COUNT>>,
 }
 
 impl<TL, const TASK_COUNT: usize> Executor<TL, TASK_COUNT>
 where
     TL: TaskList + core::cmp::Ord + core::fmt::Debug,
 {
-    pub fn new(system_time: &'static u64) -> Self {
-        let task_queue = BinaryHeap::new();
-
+    pub const fn new() -> Self {
         Executor {
-            system_time,
-            task_queue,
+            system_time: SafeCell::new(0),
+            task_queue: SafeCell::new(BinaryHeap::new()),
         }
     }
 
-    pub fn register_task(&mut self, task: &'static ThinCell<TL>) {
-        self.task_queue.push(task).expect("Task queue is full");
+    pub fn enqueue_task(&self, task: &'static TL) {
+        self.task_queue
+            .lock(|queue| queue.push(task))
+            .expect("Task queue is full");
     }
 
-    pub fn run_next_task(&mut self) {
-        loop {
-            let current_time = { *self.system_time };
+    pub fn update_system_time(&self) {
+        self.system_time.lock(|time| {
+            *time += 1;
+        });
+    }
 
-            let next_task = self.task_queue.pop();
+    pub fn start(&self) {
+        loop {
+            let next_task = self.task_queue.lock(|queue| queue.pop());
 
             match next_task {
-                Some(task) => {
-                    let mut ready_task = unsafe { task.as_ref_mut() };
+                Some(ready_task) => {
+                    let current_time = self.system_time.lock(|time| *time);
+                    ready_task.set_last_running_time(current_time);
 
-                    if *ready_task.get_state() == TaskState::Ready {
-                        ready_task.set_last_running_time(current_time);
+                    let task_state = ready_task.dispatch();
 
-                        let task_state = ready_task.dispatch();
-                        ready_task.set_state(task_state);
+                    if (task_state == TaskState::Ready) {
+                        self.task_queue
+                            .lock(|queue| queue.push(ready_task))
+                            .expect("Task queue is full");
                     }
-
-                    self.task_queue.push(task);
                 }
                 None => (),
             }

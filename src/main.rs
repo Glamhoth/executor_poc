@@ -12,17 +12,19 @@ use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m_rt::{entry, exception};
 use cortex_m_semihosting::debug;
 
-use crate::rtos::cell::ThinCell;
+use crate::rtos::cell::SafeCell;
 use crate::rtos::executor::Executor;
 use crate::rtos::task::TaskState;
 use crate::tasks::mytasks::MyTasks;
 use crate::tasks::taska::TaskA;
 use crate::tasks::taskb::TaskB;
 
-static mut SYSTEM_TIME: u64 = 0;
+// static mut SYSTEM_TIME: u64 = 0;
 
-static task_a: ThinCell<MyTasks> = ThinCell::new(MyTasks::TaskA(TaskA::new()));
-static task_b: ThinCell<MyTasks> = ThinCell::new(MyTasks::TaskB(TaskB::new()));
+static EXECUTOR: Executor<MyTasks, 8> = Executor::new();
+
+static task_a: MyTasks = MyTasks::TaskA(TaskA::new());
+static task_b: MyTasks = MyTasks::TaskB(TaskB::new());
 
 #[entry]
 fn main() -> ! {
@@ -34,11 +36,10 @@ fn main() -> ! {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    let mut executor = Executor::<MyTasks, 8>::new(unsafe { &SYSTEM_TIME });
-    executor.register_task(&task_a);
-    executor.register_task(&task_b);
+    EXECUTOR.enqueue_task(&task_a);
+    EXECUTOR.enqueue_task(&task_b);
 
-    executor.run_next_task();
+    EXECUTOR.start();
 
     debug::exit(debug::EXIT_SUCCESS);
 
@@ -47,5 +48,6 @@ fn main() -> ! {
 
 #[exception]
 fn SysTick() {
-    unsafe { SYSTEM_TIME += 1 as u64 };
+    EXECUTOR.update_system_time();
+    // unsafe { SYSTEM_TIME += 1 as u64 };
 }
