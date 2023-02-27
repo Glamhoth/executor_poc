@@ -1,6 +1,5 @@
 use crate::rtos::cell::SafeCell;
-use crate::rtos::task::TaskState;
-use crate::rtos::tasklist::TaskList;
+use crate::rtos::task::{TaskList, TaskState};
 
 use cortex_m_semihosting::hprintln;
 use heapless::binary_heap::{BinaryHeap, Max};
@@ -41,6 +40,8 @@ where
 
     pub fn start(&self) {
         loop {
+            self.update_system_time();
+
             let next_task = self.task_queue.lock(|queue| queue.pop());
 
             match next_task {

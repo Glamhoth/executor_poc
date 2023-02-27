@@ -2,10 +2,9 @@ use core::cmp::Ordering;
 use core::fmt::{Debug, Error, Formatter};
 
 use crate::rtos::cell::SafeCell;
-use crate::rtos::task::{Task, TaskState};
-use crate::rtos::tasklist::TaskList;
-use crate::tasks::taska::TaskA;
-use crate::tasks::taskb::TaskB;
+use crate::rtos::task::{Task, TaskList, TaskState};
+use crate::program::taska::TaskA;
+use crate::program::taskb::TaskB;
 
 pub enum MyTasks {
     TaskA(TaskA),

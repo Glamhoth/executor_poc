@@ -1,7 +1,9 @@
 use core::fmt::Write;
 
-use crate::rtos::task::{Task, TaskState};
 use crate::rtos::cell::SafeCell;
+use crate::rtos::messagequeue::MessageQueue;
+use crate::rtos::queue::Queue;
+use crate::rtos::task::{Task, TaskState};
 
 use cortex_m_semihosting::hio;
 
@@ -9,13 +11,15 @@ use cortex_m_semihosting::hio;
 pub struct TaskB {
     state: TaskState,
     last_running_time: SafeCell<u64>,
+    data_queue: &'static MessageQueue<u32, 64>,
 }
 
 impl TaskB {
-    pub const fn new() -> Self {
+    pub const fn new(data_queue: &'static MessageQueue<u32, 64>) -> Self {
         TaskB {
             state: TaskState::Ready,
             last_running_time: SafeCell::new(0),
+            data_queue,
         }
     }
 }
@@ -39,7 +43,12 @@ impl Task for TaskB {
 
     fn step(&self) -> TaskState {
         let mut stdout = hio::hstdout().unwrap();
-        stdout.write_str("Hello, TaskB!\n").unwrap();
+
+        match self.data_queue.dequeue() {
+            Some(value) => write!(stdout, "TaskB! {}\n", value).unwrap(),
+            None => return TaskState::Blocked,
+        }
+
         TaskState::Ready
     }
 }

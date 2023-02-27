@@ -2,8 +2,8 @@
 #![no_main]
 #![allow(warnings, unused)]
 
+mod program;
 mod rtos;
-mod tasks;
 
 extern crate atsamx7x_hal as hal;
 extern crate panic_semihosting;
@@ -12,19 +12,21 @@ use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m_rt::{entry, exception};
 use cortex_m_semihosting::debug;
 
+use crate::program::mytasks::MyTasks;
+use crate::program::taska::TaskA;
+use crate::program::taskb::TaskB;
 use crate::rtos::cell::SafeCell;
 use crate::rtos::executor::Executor;
+use crate::rtos::messagequeue::MessageQueue;
+use crate::rtos::queue::Queue;
 use crate::rtos::task::TaskState;
-use crate::tasks::mytasks::MyTasks;
-use crate::tasks::taska::TaskA;
-use crate::tasks::taskb::TaskB;
-
-// static mut SYSTEM_TIME: u64 = 0;
 
 static EXECUTOR: Executor<MyTasks, 8> = Executor::new();
 
-static task_a: MyTasks = MyTasks::TaskA(TaskA::new());
-static task_b: MyTasks = MyTasks::TaskB(TaskB::new());
+static data_queue: MessageQueue<u32, 64> = MessageQueue::new();
+
+static task_a: MyTasks = MyTasks::TaskA(TaskA::new(&data_queue));
+static task_b: MyTasks = MyTasks::TaskB(TaskB::new(&data_queue));
 
 #[entry]
 fn main() -> ! {
@@ -32,7 +34,7 @@ fn main() -> ! {
 
     let mut syst = peripherals.SYST;
     syst.set_clock_source(SystClkSource::Core);
-    syst.set_reload(8_000);
+    syst.set_reload(800_000);
     syst.enable_interrupt();
     syst.enable_counter();
 
@@ -48,6 +50,10 @@ fn main() -> ! {
 
 #[exception]
 fn SysTick() {
-    EXECUTOR.update_system_time();
-    // unsafe { SYSTEM_TIME += 1 as u64 };
+    static mut val: u32 = 0;
+
+    match data_queue.enqueue(*val) {
+        Ok(_) => *val += 1,
+        Err(_) => (),
+    }
 }
