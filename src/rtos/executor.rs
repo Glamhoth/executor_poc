@@ -9,10 +9,10 @@ type TaskQueue<T, const TASK_COUNT: usize> = BinaryHeap<T, Max, TASK_COUNT>;
 
 pub struct Executor<TL, const TASK_COUNT: usize>
 where
-    TL: TaskList + 'static,
+    TL: TaskList,
 {
-    system_time: SafeCell<u64>,
-    task_queue: SafeCell<TaskQueue<&'static TL, TASK_COUNT>>,
+    system_time: u64,
+    task_queue: TaskQueue<TL, TASK_COUNT>,
 }
 
 impl<TL, const TASK_COUNT: usize> Executor<TL, TASK_COUNT>
@@ -21,40 +21,32 @@ where
 {
     pub const fn new() -> Self {
         Executor {
-            system_time: SafeCell::new(0),
-            task_queue: SafeCell::new(BinaryHeap::new()),
+            system_time: 0,
+            task_queue: BinaryHeap::new(),
         }
     }
 
-    pub fn enqueue_task(&self, task: &'static TL) {
-        self.task_queue
-            .lock(|queue| queue.push(task))
-            .expect("Task queue is full");
+    pub fn enqueue_task(&mut self, task: TL) {
+        self.task_queue.push(task);
     }
 
-    pub fn update_system_time(&self) {
-        self.system_time.lock(|time| {
-            *time += 1;
-        });
+    pub fn update_system_time(&mut self) {
+        self.system_time += 1;
     }
 
-    pub fn start(&self) {
+    pub fn start(&mut self) {
         loop {
             self.update_system_time();
 
-            let next_task = self.task_queue.lock(|queue| queue.pop());
+            let next_task = self.task_queue.peek_mut();
 
             match next_task {
                 Some(ready_task) => {
-                    let current_time = self.system_time.lock(|time| *time);
-                    ready_task.set_last_running_time(current_time);
+                    if ready_task.get_state() == TaskState::Ready {
+                        let current_time = self.system_time;
+                        ready_task.set_last_running_time(current_time);
 
-                    let task_state = ready_task.dispatch();
-
-                    if (task_state == TaskState::Ready) {
-                        self.task_queue
-                            .lock(|queue| queue.push(ready_task))
-                            .expect("Task queue is full");
+                        ready_task.dispatch();
                     }
                 }
                 None => (),

@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(dead_code)]
 pub enum TaskState {
     Ready,
@@ -7,21 +7,21 @@ pub enum TaskState {
 }
 
 pub trait Task {
-    // fn get_state(&self) -> &TaskState;
-    // fn set_state(&mut self, state: TaskState);
+    fn get_state(&self) -> TaskState;
+    fn set_state(&self, state: TaskState);
 
     fn get_last_running_time(&self) -> u64;
     fn set_last_running_time(&self, time: u64);
 
-    fn step(&self) -> TaskState;
+    fn step(&'static self);
 }
 
 pub trait TaskList: Ord {
-    // fn get_state(&self) -> &TaskState;
-    // fn set_state(&mut self, state: TaskState);
+    fn get_state(&self) -> TaskState;
+    fn set_state(&self, state: TaskState);
 
     fn get_last_running_time(&self) -> u64;
     fn set_last_running_time(&self, time: u64);
 
-    fn dispatch(&self) -> TaskState;
+    fn dispatch(&self);
 }

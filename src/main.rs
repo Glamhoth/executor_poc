@@ -21,12 +21,10 @@ use crate::rtos::messagequeue::MessageQueue;
 use crate::rtos::queue::Queue;
 use crate::rtos::task::TaskState;
 
-static EXECUTOR: Executor<MyTasks, 8> = Executor::new();
+static data_queue: MessageQueue<MyTasks, u32, 64> = MessageQueue::new();
 
-static data_queue: MessageQueue<u32, 64> = MessageQueue::new();
-
-static task_a: MyTasks = MyTasks::TaskA(TaskA::new(&data_queue));
-static task_b: MyTasks = MyTasks::TaskB(TaskB::new(&data_queue));
+static task_a: TaskA = TaskA::new(&data_queue);
+static task_b: TaskB = TaskB::new(&data_queue);
 
 #[entry]
 fn main() -> ! {
@@ -38,10 +36,16 @@ fn main() -> ! {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    EXECUTOR.enqueue_task(&task_a);
-    EXECUTOR.enqueue_task(&task_b);
+    data_queue.enqueue(0);
+    data_queue.enqueue(1);
+    data_queue.enqueue(2);
 
-    EXECUTOR.start();
+    let mut executor: Executor<MyTasks, 8> = Executor::new();
+
+    executor.enqueue_task(MyTasks::TaskA(&task_a));
+    executor.enqueue_task(MyTasks::TaskB(&task_b));
+
+    executor.start();
 
     debug::exit(debug::EXIT_SUCCESS);
 
@@ -53,7 +57,10 @@ fn SysTick() {
     static mut val: u32 = 0;
 
     match data_queue.enqueue(*val) {
-        Ok(_) => *val += 1,
+        Ok(_) => {
+            *val += 1;
+            data_queue.notify();
+        }
         Err(_) => (),
     }
 }
