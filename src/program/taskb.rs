@@ -49,15 +49,12 @@ impl Task for TaskB {
 
         match self.data_queue.dequeue() {
             Some(value) => {
-                write!(stdout, "TaskB! {}; {}\n", value, unsafe {
-                    self.last_running_time.as_ref()
-                })
-                .unwrap();
                 self.set_state(TaskState::Ready);
+                write!(stdout, "TaskB! {};\n", value).unwrap();
             }
             None => {
-                self.data_queue.block(MyTasks::TaskB(self));
                 self.set_state(TaskState::Blocked);
+                self.data_queue.block(MyTasks::TaskB(self));
             }
         };
     }

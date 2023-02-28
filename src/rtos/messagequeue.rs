@@ -8,7 +8,7 @@ where
     TL: TaskList,
 {
     queue: SafeCell<heapless::spsc::Queue<E, N>>,
-    blocking: SafeCell<heapless::Vec<TL, 8>>,
+    blocking: SafeCell<heapless::spsc::Queue<TL, 8>>,
 }
 
 impl<TL, E, const N: usize> Queue<E, TL> for MessageQueue<TL, E, N>
@@ -25,15 +25,13 @@ where
 
     fn block(&self, task: TL) {
         self.blocking
-            .lock(|vec| vec.push(task).expect("Blocking list full"));
+            .lock(|q| q.enqueue(task).expect("Blocking list full"));
     }
 
     fn notify(&self) {
-        self.blocking.lock(|vec| {
-            for task in &mut *vec {
-                task.set_state(TaskState::Ready);
-            }
-            vec.clear();
+        self.blocking.lock(|q| match q.dequeue() {
+            Some(task) => task.set_state(TaskState::Ready),
+            None => (),
         });
     }
 }
@@ -45,7 +43,7 @@ where
     pub const fn new() -> Self {
         MessageQueue {
             queue: SafeCell::new(heapless::spsc::Queue::new()),
-            blocking: SafeCell::new(heapless::Vec::new()),
+            blocking: SafeCell::new(heapless::spsc::Queue::new()),
         }
     }
 }
