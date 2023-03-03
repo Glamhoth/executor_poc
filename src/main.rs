@@ -7,67 +7,60 @@ extern crate panic_semihosting;
 
 mod rtos;
 
-use core::any::Any;
-
-use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m_rt::{entry, exception};
-use cortex_m_semihosting::debug;
+use cortex_m_semihosting::{debug, hprintln};
 use heapless::binary_heap::{BinaryHeap, Max};
 
-use crate::rtos::executor::Executor;
 use crate::rtos::task::Task;
-use crate::rtos::taskdata::TaskData;
-use crate::rtos::tasklet::Tasklet;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct TaskAData {
-    counter: u32,
+struct TaskA {
+    last_running_time: u32,
 }
 
-impl TaskData for TaskAData {
-    // fn as_any_mut(&mut self) -> &mut dyn Any {
-    //     self
-    // }
+impl TaskA {
+    pub const fn new() -> Self {
+        TaskA {
+            last_running_time: 42,
+        }
+    }
 }
 
-fn task_a() {}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct TaskBData {
-    small_counter: u8,
+impl Task for TaskA {
+    fn get_last_running_time(&self) -> u32 {
+        self.last_running_time
+    }
 }
 
-impl TaskData for TaskBData {
-    // fn as_any_mut(&mut self) -> &mut dyn Any {
-    //     self
-    // }
+struct TaskB {
+    last_running_time: u32,
 }
 
-fn task_b() {}
+impl TaskB {
+    pub const fn new() -> Self {
+        TaskB {
+            last_running_time: 21,
+        }
+    }
+}
+
+impl Task for TaskB {
+    fn get_last_running_time(&self) -> u32 {
+        self.last_running_time
+    }
+}
 
 #[entry]
 fn main() -> ! {
-    let peripherals = cortex_m::Peripherals::take().unwrap();
+    static task_a: TaskA = TaskA::new();
+    static task_b: TaskB = TaskB::new();
 
-    let mut syst = peripherals.SYST;
-    syst.set_clock_source(SystClkSource::Core);
-    syst.set_reload(800_000);
-    syst.enable_interrupt();
-    syst.enable_counter();
+    let mut queue: BinaryHeap<*const dyn Task, Max, 8> = BinaryHeap::new();
+    queue.push(task_a.as_task());
+    queue.push(task_b.as_task());
 
-    let task_a_data = TaskAData { counter: 0 };
-    let task_a = Tasklet::new(task_a_data, &task_a);
-
-    let task_b_data = TaskBData { small_counter: 0 };
-    let task_b = Tasklet::new(task_b_data, &task_b);
-
-    let mut queue: BinaryHeap<*dyn Any, Max, 8> = BinaryHeap::new();
-    queue.push(task_a.as_any());
-    queue.push(task_b.as_any());
-
-    // let mut executor = Executor::new();
-    // executor.enqueue_task(task_a);
-    // executor.enqueue_task(task_b);
+    for task in &queue {
+        hprintln!("{}", unsafe { (**task).get_last_running_time() });
+    }
 
     debug::exit(debug::EXIT_SUCCESS);
 

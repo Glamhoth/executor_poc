@@ -1,27 +1,15 @@
-use core::any::Any;
-
 use heapless::binary_heap::{BinaryHeap, Max};
 
-use crate::rtos::task::Task;
+type TaskQueue<const N: usize> = BinaryHeap<u32, Max, N>;
 
-pub struct Executor<T>
-where
-    T: Any + Task + Ord,
-{
-    task_queue: BinaryHeap<T, Max, 8>,
+pub struct Executor<const N: usize> {
+    task_queue: TaskQueue<N>,
 }
 
-impl<T> Executor<T>
-where
-    T: Any + Task + Ord
-{
+impl<const N: usize> Executor<N> {
     pub const fn new() -> Self {
         let task_queue = BinaryHeap::new();
 
         Executor { task_queue }
-    }
-
-    pub fn enqueue_task(&mut self, task: T) {
-        self.task_queue.push(task);
     }
 }
