@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(const_trait_impl)]
 // #![allow(warnings, unused)]
 
 extern crate atsamx7x_hal as hal;
@@ -7,52 +8,48 @@ extern crate panic_semihosting;
 
 mod rtos;
 
+use core::default::Default;
+
 use cortex_m_rt::{entry, exception};
 use cortex_m_semihosting::{debug, hprintln};
 use heapless::binary_heap::{BinaryHeap, Max};
 
 use crate::rtos::task::Task;
+use crate::rtos::taskdata::TaskData;
+use crate::rtos::tasklet::Tasklet;
 
-struct TaskA {
-    last_running_time: u32,
+struct TaskAData {
+    counter: u32,
 }
 
-impl TaskA {
-    pub const fn new() -> Self {
-        TaskA {
-            last_running_time: 42,
+impl const Default for TaskAData {
+    fn default() -> Self {
+        TaskAData {
+            counter: 11
         }
     }
 }
 
-impl Task for TaskA {
-    fn get_last_running_time(&self) -> u32 {
-        self.last_running_time
-    }
+impl TaskData for TaskAData {}
+
+struct TaskBData {
+    small_counter: u8,
 }
 
-struct TaskB {
-    last_running_time: u32,
-}
-
-impl TaskB {
-    pub const fn new() -> Self {
-        TaskB {
-            last_running_time: 21,
+impl const Default for TaskBData {
+    fn default() -> Self {
+        TaskBData {
+            small_counter: 22
         }
     }
 }
 
-impl Task for TaskB {
-    fn get_last_running_time(&self) -> u32 {
-        self.last_running_time
-    }
-}
+impl TaskData for TaskBData {}
 
 #[entry]
 fn main() -> ! {
-    static task_a: TaskA = TaskA::new();
-    static task_b: TaskB = TaskB::new();
+    static task_a: Tasklet<TaskAData> = Tasklet::new(42);
+    static task_b: Tasklet<TaskBData> = Tasklet::new(21);
 
     let mut queue: BinaryHeap<*const dyn Task, Max, 8> = BinaryHeap::new();
     queue.push(task_a.as_task());
