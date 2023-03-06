@@ -9,11 +9,14 @@ extern crate panic_semihosting;
 mod rtos;
 
 use core::default::Default;
+use core::fmt::Write;
 
 use cortex_m_rt::{entry, exception};
-use cortex_m_semihosting::{debug, hprintln};
+use cortex_m_semihosting::{debug, hio, hprintln};
 use heapless::binary_heap::{BinaryHeap, Max};
 
+use crate::rtos::executor::Executor;
+use crate::rtos::safecell::SafeCell;
 use crate::rtos::task::Task;
 use crate::rtos::taskdata::TaskData;
 use crate::rtos::tasklet::Tasklet;
@@ -24,9 +27,7 @@ struct TaskAData {
 
 impl const Default for TaskAData {
     fn default() -> Self {
-        TaskAData {
-            counter: 11
-        }
+        TaskAData { counter: 11 }
     }
 }
 
@@ -38,26 +39,45 @@ struct TaskBData {
 
 impl const Default for TaskBData {
     fn default() -> Self {
-        TaskBData {
-            small_counter: 22
-        }
+        TaskBData { small_counter: 22 }
     }
+}
+
+fn task_a(data: &SafeCell<TaskAData>) {
+    let mut counter = data.as_ref_mut().counter;
+    counter += 1;
+
+    let mut stdout = hio::hstdout().unwrap();
+    write!(stdout, "TaskA: {}\n", counter).unwrap();
+}
+
+fn task_b(data: &SafeCell<TaskBData>) {
+    let mut counter = data.as_ref_mut().small_counter;
+    counter += 1;
+
+    let mut stdout = hio::hstdout().unwrap();
+    write!(stdout, "TaskB: {}\n", counter).unwrap();
 }
 
 impl TaskData for TaskBData {}
 
 #[entry]
 fn main() -> ! {
-    static task_a: Tasklet<TaskAData> = Tasklet::new(42);
-    static task_b: Tasklet<TaskBData> = Tasklet::new(21);
+    static taska: Tasklet<TaskAData> = Tasklet::new(&task_a);
+    static taskb: Tasklet<TaskBData> = Tasklet::new(&task_b);
 
-    let mut queue: BinaryHeap<*const dyn Task, Max, 8> = BinaryHeap::new();
-    queue.push(task_a.as_task());
-    queue.push(task_b.as_task());
+    let mut executor = Executor::<8>::new();
 
-    for task in &queue {
-        hprintln!("{}", unsafe { (**task).get_last_running_time() });
-    }
+    executor.enqueue_task(&taska);
+    executor.enqueue_task(&taskb);
+
+    // let mut queue: BinaryHeap<*const dyn Task, Max, 8> = BinaryHeap::new();
+    // queue.push(taska.as_task());
+    // queue.push(taskb.as_task());
+
+    // for task in &queue {
+    //     hprintln!("{}", unsafe { (**task).get_last_running_time() });
+    // }
 
     debug::exit(debug::EXIT_SUCCESS);
 

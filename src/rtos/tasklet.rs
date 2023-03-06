@@ -2,21 +2,27 @@ use core::default::Default;
 
 use super::task::Task;
 use super::taskdata::TaskData;
+use super::safecell::SafeCell;
 
 pub struct Tasklet<T>
 where
-    T: TaskData
+    T: TaskData + 'static,
 {
     data: T,
     last_running_time: u32,
+    step_fn: &'static dyn Fn(&SafeCell<T>),
 }
 
 impl<T> Tasklet<T>
 where
-    T: TaskData + ~const Default
+    T: TaskData + ~const Default,
 {
-    pub const fn new(last_running_time: u32) -> Self {
-        Tasklet { data: T::default(), last_running_time }
+    pub const fn new(step_fn: &'static dyn Fn(&SafeCell<T>)) -> Self {
+        Tasklet {
+            data: T::default(),
+            last_running_time: 0,
+            step_fn,
+        }
     }
 }
 
@@ -25,3 +31,5 @@ impl<T: TaskData> Task for Tasklet<T> {
         self.last_running_time
     }
 }
+
+unsafe impl<T> Sync for Tasklet<T> where T: Send + TaskData {}
