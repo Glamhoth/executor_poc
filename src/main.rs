@@ -3,26 +3,28 @@
 #![allow(warnings, unused)]
 #![feature(const_trait_impl)]
 
-mod program;
 mod rtos;
 
 extern crate atsamx7x_hal as hal;
 extern crate panic_semihosting;
 
+use core::ffi::c_void;
+
 use cortex_m::peripheral::syst::SystClkSource;
-use cortex_m_rt::{entry, exception};
-use cortex_m_semihosting::debug;
+use cortex_m_rt::entry;
+use cortex_m_semihosting::{debug, hprintln};
 
 use crate::rtos::executor::Executor;
-use crate::rtos::messagequeue::MessageQueue;
-use crate::rtos::queue::Queue;
-use crate::rtos::safecell::SafeCell;
+use crate::rtos::task::TaskHandle;
 use crate::rtos::tasklet::Tasklet;
 
-use crate::program::taska::{task_a, TaskAData};
-use crate::program::taskb::{task_b, TaskBData};
+fn task_a(data: u32) {
+    hprintln!("{}", data);
+}
 
-static data_queue: MessageQueue<u32, 64> = MessageQueue::new();
+fn task_b(data: u8) {
+    hprintln!("{}", data);
+}
 
 #[entry]
 fn main() -> ! {
@@ -34,39 +36,16 @@ fn main() -> ! {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    let mut executor: Executor<8> = Executor::new();
+    static taska: Tasklet<u32> = Tasklet::new(task_a);
+    static taskb: Tasklet<u8> = Tasklet::new(task_b);
 
-    static taska_res: SafeCell<TaskAData> = SafeCell::new(TaskAData {
-        counter: 0,
-        data_queue: &data_queue,
-    });
-    static taska: Tasklet<TaskAData> = Tasklet::new(&taska_res, &task_a);
-
-    static taskb_res: SafeCell<TaskBData> = SafeCell::new(TaskBData {
-        small_counter: 0,
-        data_queue: &data_queue,
-    });
-    static taskb: Tasklet<TaskBData> = Tasklet::new(&taskb_res, &task_b);
-
-    executor.enqueue_task(&taska);
-    executor.enqueue_task(&taskb);
-
-    executor.start();
+    let mut executor = Executor::new();
+    // executor.enqueue_task(TaskHandle(&taska), unsafe {
+    //     core::mem::transmute::<_, c_void>(42u32)
+    // });
+    // executor.enqueue_task(TaskHandle(&taskb), 8u8 as c_void);
 
     debug::exit(debug::EXIT_SUCCESS);
 
     loop {}
-}
-
-#[exception]
-fn SysTick() {
-    static mut val: u32 = 0;
-
-    match data_queue.enqueue(*val) {
-        Ok(_) => {
-            *val += 1;
-            data_queue.notify();
-        }
-        Err(_) => (),
-    }
 }

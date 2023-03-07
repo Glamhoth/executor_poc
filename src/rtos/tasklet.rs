@@ -1,52 +1,27 @@
-use crate::rtos::critcell::CritCell;
-use crate::rtos::safecell::SafeCell;
-use crate::rtos::task::{Task, TaskState};
-use crate::rtos::taskdata::TaskData;
+use core::ffi::c_void;
+use heapless::spsc::Queue;
 
-pub struct Tasklet<T>
-where
-    T: TaskData + 'static,
-{
-    data: &'static SafeCell<T>,
-    state: CritCell<TaskState>,
-    last_running_time: CritCell<u64>,
-    step_fn: &'static dyn Fn(&SafeCell<T>),
+use crate::rtos::task::Task;
+
+type StepFn<E> = fn(E);
+
+pub struct Tasklet<E> {
+    step_fn: StepFn<E>,
+    data_queue: Queue<E, 8>,
 }
 
-impl<T> Tasklet<T>
-where
-    T: TaskData,
-{
-    pub const fn new(data: &'static SafeCell<T>, step_fn: &'static dyn Fn(&SafeCell<T>)) -> Self {
-        Tasklet {
-            data,
-            state: CritCell::new(TaskState::Ready),
-            last_running_time: CritCell::new(0),
-            step_fn,
-        }
+impl<E> Tasklet<E> {
+    pub const fn new(step_fn: StepFn<E>) -> Self {
+        let data_queue = Queue::new();
+
+        Tasklet { step_fn, data_queue }
     }
 }
 
-impl<T: TaskData> Task for Tasklet<T> {
-    fn get_state(&self) -> TaskState {
-        self.state.lock(|s| *s)
-    }
-
-    fn set_state(&self, state: TaskState) {
-        self.state.lock(|s| *s = state)
-    }
-
-    fn get_last_running_time(&self) -> u64 {
-        self.last_running_time.lock(|t| *t)
-    }
-
-    fn set_last_running_time(&self, time: u64) {
-        self.last_running_time.lock(|t| *t = time)
-    }
-
+impl<E> Task for Tasklet<E> {
     fn step(&self) {
-        (self.step_fn)(self.data)
+        (self.step_fn)(self.data_queue.dequeue());
     }
 }
 
-unsafe impl<T> Sync for Tasklet<T> where T: Send + TaskData {}
+unsafe impl<E> Sync for Tasklet<E> where E: Send {}
