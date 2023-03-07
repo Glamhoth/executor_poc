@@ -91,21 +91,21 @@ fn main() -> ! {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    static newliner_data: SafeCell<NewlinerData> = SafeCell::new(NewlinerData { counter: 0 });
-    static newliner: Tasklet<NewlinerData, u32> = Tasklet::new(&newliner_data, newliner_fn, 1);
-    channel.register_task(&newliner);
-
-    static stubber_data: SafeCell<StubberData> = SafeCell::new(StubberData { counter: 0 });
-    static stubber: Tasklet<StubberData, u32> = Tasklet::new(&stubber_data, stubber_fn, 2);
-    channel.register_task(&stubber);
+    static fizzer_data: SafeCell<FizzerData> = SafeCell::new(FizzerData { counter: 0 });
+    static fizzer: Tasklet<FizzerData, u32> = Tasklet::new(&fizzer_data, fizzer_fn, 4);
+    channel.register_task(&fizzer);
 
     static buzzer_data: SafeCell<BuzzerData> = SafeCell::new(BuzzerData { counter: 0 });
     static buzzer: Tasklet<BuzzerData, u32> = Tasklet::new(&buzzer_data, buzzer_fn, 3);
     channel.register_task(&buzzer);
 
-    static fizzer_data: SafeCell<FizzerData> = SafeCell::new(FizzerData { counter: 0 });
-    static fizzer: Tasklet<FizzerData, u32> = Tasklet::new(&fizzer_data, fizzer_fn, 4);
-    channel.register_task(&fizzer);
+    static stubber_data: SafeCell<StubberData> = SafeCell::new(StubberData { counter: 0 });
+    static stubber: Tasklet<StubberData, u32> = Tasklet::new(&stubber_data, stubber_fn, 2);
+    channel.register_task(&stubber);
+
+    static newliner_data: SafeCell<NewlinerData> = SafeCell::new(NewlinerData { counter: 0 });
+    static newliner: Tasklet<NewlinerData, u32> = Tasklet::new(&newliner_data, newliner_fn, 1);
+    channel.register_task(&newliner);
 
     channel.send_data(1);
 
