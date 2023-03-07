@@ -107,6 +107,8 @@ fn main() -> ! {
     static fizzer: Tasklet<FizzerData, u32> = Tasklet::new(&fizzer_data, fizzer_fn, 4);
     channel.register_task(&fizzer);
 
+    channel.send_data(1);
+
     executor.start();
 
     debug::exit(debug::EXIT_SUCCESS);
@@ -118,6 +120,6 @@ fn main() -> ! {
 fn SysTick() {
     static mut val: u32 = 1;
 
-    channel.send_data(*val);
     *val += 1;
+    channel.send_data(*val);
 }
