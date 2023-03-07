@@ -1,20 +1,14 @@
-use crate::rtos::cell::SafeCell;
+use crate::rtos::critcell::CritCell;
 use crate::rtos::queue::Queue;
-use crate::rtos::task::{TaskList, TaskState};
+use crate::rtos::task::{Task, TaskHandle, TaskState};
 
 #[derive(Debug)]
-pub struct MessageQueue<TL, E, const N: usize>
-where
-    TL: TaskList,
-{
-    queue: SafeCell<heapless::spsc::Queue<E, N>>,
-    blocking: SafeCell<heapless::spsc::Queue<TL, 8>>,
+pub struct MessageQueue<E, const N: usize> {
+    queue: CritCell<heapless::spsc::Queue<E, N>>,
+    blocking: CritCell<heapless::spsc::Queue<TaskHandle, 8>>,
 }
 
-impl<TL, E, const N: usize> Queue<E, TL> for MessageQueue<TL, E, N>
-where
-    TL: TaskList + core::fmt::Debug + 'static,
-{
+impl<E, const N: usize> Queue<E> for MessageQueue<E, N> {
     fn enqueue(&self, elem: E) -> Result<(), E> {
         self.queue.lock(|queue| queue.enqueue(elem))
     }
@@ -23,27 +17,24 @@ where
         self.queue.lock(|queue| queue.dequeue())
     }
 
-    fn block(&self, task: TL) {
-        self.blocking
-            .lock(|q| q.enqueue(task).expect("Blocking list full"));
+    fn block(&self, task: &'static dyn Task) {
+        // self.blocking
+        //     .lock(|q| q.enqueue(TaskHandle(task)).expect("Blocking list full"));
     }
 
     fn notify(&self) {
-        self.blocking.lock(|q| match q.dequeue() {
-            Some(task) => task.set_state(TaskState::Ready),
-            None => (),
-        });
+        // self.blocking.lock(|q| match q.dequeue() {
+        //     Some(task) => unsafe { (*task.0).set_state(TaskState::Ready) },
+        //     None => (),
+        // });
     }
 }
 
-impl<TL, E, const N: usize> MessageQueue<TL, E, N>
-where
-    TL: TaskList,
-{
+impl<E, const N: usize> MessageQueue<E, N> {
     pub const fn new() -> Self {
         MessageQueue {
-            queue: SafeCell::new(heapless::spsc::Queue::new()),
-            blocking: SafeCell::new(heapless::spsc::Queue::new()),
+            queue: CritCell::new(heapless::spsc::Queue::new()),
+            blocking: CritCell::new(heapless::spsc::Queue::new()),
         }
     }
 }

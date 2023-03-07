@@ -5,12 +5,12 @@ use core::fmt::{Debug, Error, Formatter};
 use cortex_m::interrupt;
 
 #[repr(transparent)]
-pub struct SafeCell<T>(UnsafeCell<T>);
+pub struct CritCell<T>(UnsafeCell<T>);
 
-impl<T> SafeCell<T> {
+impl<T> CritCell<T> {
     #[inline(always)]
     pub const fn new(value: T) -> Self {
-        SafeCell(UnsafeCell::new(value))
+        CritCell(UnsafeCell::new(value))
     }
 
     #[inline(always)]
@@ -39,9 +39,9 @@ impl<T> SafeCell<T> {
     }
 }
 
-unsafe impl<T> Sync for SafeCell<T> where T: Send {}
+unsafe impl<T> Sync for CritCell<T> where T: Send {}
 
-impl<T: Debug> Debug for SafeCell<T> {
+impl<T: Debug> Debug for CritCell<T> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), Error> {
         unsafe { self.as_ref().fmt(fmt) }
     }

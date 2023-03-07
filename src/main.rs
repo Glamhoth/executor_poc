@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![allow(warnings, unused)]
+#![feature(const_trait_impl)]
 
 mod program;
 mod rtos;
@@ -12,19 +13,16 @@ use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m_rt::{entry, exception};
 use cortex_m_semihosting::debug;
 
-use crate::program::mytasks::MyTasks;
-use crate::program::taska::TaskA;
-use crate::program::taskb::TaskB;
-use crate::rtos::cell::SafeCell;
 use crate::rtos::executor::Executor;
 use crate::rtos::messagequeue::MessageQueue;
 use crate::rtos::queue::Queue;
-use crate::rtos::task::TaskState;
+use crate::rtos::safecell::SafeCell;
+use crate::rtos::tasklet::Tasklet;
 
-static data_queue: MessageQueue<MyTasks, u32, 64> = MessageQueue::new();
+use crate::program::taska::{task_a, TaskAData};
+use crate::program::taskb::{task_b, TaskBData};
 
-static task_a: TaskA = TaskA::new(&data_queue);
-static task_b: TaskB = TaskB::new(&data_queue);
+static data_queue: MessageQueue<u32, 64> = MessageQueue::new();
 
 #[entry]
 fn main() -> ! {
@@ -36,14 +34,22 @@ fn main() -> ! {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    data_queue.enqueue(0);
-    data_queue.enqueue(1);
-    data_queue.enqueue(2);
+    let mut executor: Executor<8> = Executor::new();
 
-    let mut executor: Executor<MyTasks, 8> = Executor::new();
+    static taska_res: SafeCell<TaskAData> = SafeCell::new(TaskAData {
+        counter: 0,
+        data_queue: &data_queue,
+    });
+    static taska: Tasklet<TaskAData> = Tasklet::new(&taska_res, &task_a);
 
-    executor.enqueue_task(MyTasks::TaskA(&task_a));
-    executor.enqueue_task(MyTasks::TaskB(&task_b));
+    static taskb_res: SafeCell<TaskBData> = SafeCell::new(TaskBData {
+        small_counter: 0,
+        data_queue: &data_queue,
+    });
+    static taskb: Tasklet<TaskBData> = Tasklet::new(&taskb_res, &task_b);
+
+    executor.enqueue_task(&taska);
+    executor.enqueue_task(&taskb);
 
     executor.start();
 
