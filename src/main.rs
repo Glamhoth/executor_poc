@@ -1,28 +1,85 @@
 #![no_std]
 #![no_main]
 #![allow(warnings, unused)]
-#![feature(const_trait_impl)]
+#![feature(trait_upcasting)]
 
-mod program;
 mod rtos;
 
 extern crate atsamx7x_hal as hal;
 extern crate panic_semihosting;
 
+use core::fmt::Write;
+
 use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m_rt::{entry, exception};
-use cortex_m_semihosting::debug;
+use cortex_m_semihosting::{debug, hio};
 
+use crate::rtos::channel::Channel;
 use crate::rtos::executor::Executor;
-use crate::rtos::messagequeue::MessageQueue;
-use crate::rtos::queue::Queue;
+use crate::rtos::notifiable::Notifiable;
 use crate::rtos::safecell::SafeCell;
 use crate::rtos::tasklet::Tasklet;
 
-use crate::program::taska::{task_a, TaskAData};
-use crate::program::taskb::{task_b, TaskBData};
+struct FizzerData {
+    counter: u32,
+}
 
-static data_queue: MessageQueue<u32, 64> = MessageQueue::new();
+struct BuzzerData {
+    counter: u32,
+}
+
+struct StubberData {
+    counter: u32,
+}
+
+struct NewlinerData {
+    counter: u32,
+}
+
+fn fizzer_fn(local_data: &'static SafeCell<FizzerData>, data: u32) {
+    let counter = &mut local_data.as_ref_mut().counter;
+
+    if data % 3 == 0 {
+        let mut stdout = hio::hstdout().unwrap();
+        write!(stdout, "Fizz");
+    }
+
+    *counter += 1;
+}
+
+fn buzzer_fn(local_data: &'static SafeCell<BuzzerData>, data: u32) {
+    let counter = &mut local_data.as_ref_mut().counter;
+
+    if data % 5 == 0 {
+        let mut stdout = hio::hstdout().unwrap();
+        write!(stdout, "Buzz");
+    }
+
+    *counter += 1;
+}
+
+fn stubber_fn(local_data: &'static SafeCell<StubberData>, data: u32) {
+    let counter = &mut local_data.as_ref_mut().counter;
+
+    if data % 3 != 0 && data % 5 != 0 {
+        let mut stdout = hio::hstdout().unwrap();
+        write!(stdout, "{}", data);
+    }
+
+    *counter += 1;
+}
+
+fn newliner_fn(local_data: &'static SafeCell<NewlinerData>, data: u32) {
+    let counter = &mut local_data.as_ref_mut().counter;
+
+    let mut stdout = hio::hstdout().unwrap();
+    write!(stdout, "\n");
+
+    *counter += 1;
+}
+
+static executor: Executor = Executor::new();
+static channel: Channel<u32> = Channel::new(&executor);
 
 #[entry]
 fn main() -> ! {
@@ -34,22 +91,21 @@ fn main() -> ! {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    let mut executor: Executor<8> = Executor::new();
+    static newliner_data: SafeCell<NewlinerData> = SafeCell::new(NewlinerData { counter: 0 });
+    static newliner: Tasklet<NewlinerData, u32> = Tasklet::new(&newliner_data, newliner_fn, 1);
+    channel.register_task(&newliner);
 
-    static taska_res: SafeCell<TaskAData> = SafeCell::new(TaskAData {
-        counter: 0,
-        data_queue: &data_queue,
-    });
-    static taska: Tasklet<TaskAData> = Tasklet::new(&taska_res, &task_a);
+    static stubber_data: SafeCell<StubberData> = SafeCell::new(StubberData { counter: 0 });
+    static stubber: Tasklet<StubberData, u32> = Tasklet::new(&stubber_data, stubber_fn, 2);
+    channel.register_task(&stubber);
 
-    static taskb_res: SafeCell<TaskBData> = SafeCell::new(TaskBData {
-        small_counter: 0,
-        data_queue: &data_queue,
-    });
-    static taskb: Tasklet<TaskBData> = Tasklet::new(&taskb_res, &task_b);
+    static buzzer_data: SafeCell<BuzzerData> = SafeCell::new(BuzzerData { counter: 0 });
+    static buzzer: Tasklet<BuzzerData, u32> = Tasklet::new(&buzzer_data, buzzer_fn, 3);
+    channel.register_task(&buzzer);
 
-    executor.enqueue_task(&taska);
-    executor.enqueue_task(&taskb);
+    static fizzer_data: SafeCell<FizzerData> = SafeCell::new(FizzerData { counter: 0 });
+    static fizzer: Tasklet<FizzerData, u32> = Tasklet::new(&fizzer_data, fizzer_fn, 4);
+    channel.register_task(&fizzer);
 
     executor.start();
 
@@ -60,13 +116,8 @@ fn main() -> ! {
 
 #[exception]
 fn SysTick() {
-    static mut val: u32 = 0;
+    static mut val: u32 = 1;
 
-    match data_queue.enqueue(*val) {
-        Ok(_) => {
-            *val += 1;
-            data_queue.notify();
-        }
-        Err(_) => (),
-    }
+    channel.send_data(*val);
+    *val += 1;
 }

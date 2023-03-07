@@ -1,52 +1,61 @@
-use crate::rtos::critcell::CritCell;
-use crate::rtos::safecell::SafeCell;
-use crate::rtos::task::{Task, TaskState};
-use crate::rtos::taskdata::TaskData;
+use core::fmt::Debug;
 
-pub struct Tasklet<T>
+use heapless::spsc::Queue;
+
+use crate::rtos::critcell::CritCell;
+use crate::rtos::notifiable::Notifiable;
+use crate::rtos::safecell::SafeCell;
+use crate::rtos::task::Task;
+
+type StepFn<T, E> = fn(&'static SafeCell<T>, E);
+
+pub struct Tasklet<T, E>
 where
-    T: TaskData + 'static,
+    T: 'static,
 {
-    data: &'static SafeCell<T>,
-    state: CritCell<TaskState>,
-    last_running_time: CritCell<u64>,
-    step_fn: &'static dyn Fn(&SafeCell<T>),
+    local_data: &'static SafeCell<T>,
+    data_queue: CritCell<Queue<E, 8>>,
+    priority: u8,
+    step_fn: StepFn<T, E>,
 }
 
-impl<T> Tasklet<T>
+impl<T, E> Tasklet<T, E>
 where
-    T: TaskData,
+    T: 'static,
 {
-    pub const fn new(data: &'static SafeCell<T>, step_fn: &'static dyn Fn(&SafeCell<T>)) -> Self {
+    pub const fn new(local_data: &'static SafeCell<T>, step_fn: StepFn<T, E>, priority: u8) -> Self {
+        let data_queue = CritCell::new(Queue::new());
+
         Tasklet {
-            data,
-            state: CritCell::new(TaskState::Ready),
-            last_running_time: CritCell::new(0),
+            local_data,
+            data_queue,
+            priority,
             step_fn,
         }
     }
 }
 
-impl<T: TaskData> Task for Tasklet<T> {
-    fn get_state(&self) -> TaskState {
-        self.state.lock(|s| *s)
-    }
-
-    fn set_state(&self, state: TaskState) {
-        self.state.lock(|s| *s = state)
-    }
-
-    fn get_last_running_time(&self) -> u64 {
-        self.last_running_time.lock(|t| *t)
-    }
-
-    fn set_last_running_time(&self, time: u64) {
-        self.last_running_time.lock(|t| *t = time)
+impl<T, E> Task for Tasklet<T, E> {
+    fn get_priority(&self) -> u8 {
+        self.priority
     }
 
     fn step(&self) {
-        (self.step_fn)(self.data)
+        let data = self.data_queue.lock(|q| q.dequeue());
+
+        match data {
+            Some(d) => (self.step_fn)(self.local_data, d),
+            None => (),
+        };
     }
 }
 
-unsafe impl<T> Sync for Tasklet<T> where T: Send + TaskData {}
+impl<T, E> Notifiable<E> for Tasklet<T, E>
+where
+    E: Debug,
+{
+    fn notify(&self, data: E) {
+        self.data_queue
+            .lock(|q| q.enqueue(data).expect("Data queue full"));
+    }
+}
