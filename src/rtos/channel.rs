@@ -8,7 +8,7 @@ pub struct Channel<E>
 where
     E: Clone,
 {
-    executor: &'static Executor,
+    // executor: &'static Executor,
     registered: SafeCell<Vec<NotifHandle<E>, 8>>,
 }
 
@@ -16,11 +16,11 @@ impl<E> Channel<E>
 where
     E: Clone,
 {
-    pub const fn new(executor: &'static Executor) -> Self {
+    pub const fn new() -> Self {
         let registered = SafeCell::new(Vec::new());
 
         Channel {
-            executor,
+            // executor,
             registered,
         }
     }
@@ -32,7 +32,7 @@ where
     pub fn send_data(&self, data: E) {
         for t in self.registered.as_ref() {
             unsafe { (*t.0).notify(data.clone()) };
-            self.executor.enqueue_task(t.0);
+            // self.executor.enqueue_task(t.0);
         }
     }
 }

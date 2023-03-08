@@ -12,7 +12,7 @@ use core::fmt::Write;
 
 use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m_rt::{entry, exception};
-use cortex_m_semihosting::{debug, hio};
+use cortex_m_semihosting::{debug, hio, hprintln};
 
 use crate::rtos::channel::Channel;
 use crate::rtos::executor::Executor;
@@ -20,66 +20,82 @@ use crate::rtos::notifiable::Notifiable;
 use crate::rtos::safecell::SafeCell;
 use crate::rtos::tasklet::Tasklet;
 
-struct FizzerData {
-    counter: u32,
+struct RequesterData {
+    do_work: bool,
+    request_channel: &'static Channel<()>,
 }
 
-struct BuzzerData {
-    counter: u32,
-}
+fn requester_fn(local_data: &'static SafeCell<RequesterData>, data: Option<bool>) {
+    let do_work = &mut local_data.as_ref_mut().do_work;
 
-struct StubberData {
-    counter: u32,
-}
+    match data {
+        Some(val) => *do_work = val,
+        None => (),
+    };
 
-struct NewlinerData {
-    counter: u32,
-}
-
-fn fizzer_fn(local_data: &'static SafeCell<FizzerData>, data: u32) {
-    let counter = &mut local_data.as_ref_mut().counter;
-
-    if data % 3 == 0 {
-        let mut stdout = hio::hstdout().unwrap();
-        write!(stdout, "Fizz");
+    if *do_work {
+        let request_channel = local_data.as_ref().request_channel;
+        request_channel.send_data(());
     }
-
-    *counter += 1;
 }
 
-fn buzzer_fn(local_data: &'static SafeCell<BuzzerData>, data: u32) {
-    let counter = &mut local_data.as_ref_mut().counter;
+struct ContainerData {
+    counter: u32,
+    raw_data_channel: &'static Channel<u32>,
+}
 
-    if data % 5 == 0 {
-        let mut stdout = hio::hstdout().unwrap();
-        write!(stdout, "Buzz");
+fn container_fn(local_data: &'static SafeCell<ContainerData>, data: ()) {
+    let counter = &mut local_data.as_ref_mut().counter;
+    *counter += 1;
+
+    let raw_data_channel = local_data.as_ref().raw_data_channel;
+    raw_data_channel.send_data(*counter);
+}
+
+struct ComputronixData {
+    raw_data_counter: u8,
+    raw_data: [u32; 4],
+    computed_data_channel: &'static Channel<u32>,
+}
+
+fn computronix_fn(local_data: &'static SafeCell<ComputronixData>, data: u32) {
+    let raw_data_counter = &mut local_data.as_ref_mut().raw_data_counter;
+    *raw_data_counter += 1;
+
+    let raw_data = &mut local_data.as_ref_mut().raw_data;
+    raw_data[*raw_data_counter as usize - 1] = data;
+
+    if *raw_data_counter == 4 {
+        let computed = raw_data.iter().sum();
+
+        let computed_data_channel = local_data.as_ref().computed_data_channel;
+        computed_data_channel.send_data(computed);
+
+        *raw_data_counter = 0;
     }
-
-    *counter += 1;
 }
 
-fn stubber_fn(local_data: &'static SafeCell<StubberData>, data: u32) {
-    let counter = &mut local_data.as_ref_mut().counter;
+struct ReceiverData {
+    sum: u32,
+    toggle_channel: &'static Channel<Option<bool>>,
+}
 
-    if data % 3 != 0 && data % 5 != 0 {
-        let mut stdout = hio::hstdout().unwrap();
-        write!(stdout, "{}", data);
+fn receiver_fn(local_data: &'static SafeCell<ReceiverData>, data: u32) {
+    let sum = &mut local_data.as_ref_mut().sum;
+    *sum += data;
+
+    if *sum > 5772 {
+        hprintln!("Computation completed");
+
+        let toggle_channel = local_data.as_ref().toggle_channel;
+        toggle_channel.send_data(Some(false));
     }
-
-    *counter += 1;
 }
 
-fn newliner_fn(local_data: &'static SafeCell<NewlinerData>, data: u32) {
-    let counter = &mut local_data.as_ref_mut().counter;
-
-    let mut stdout = hio::hstdout().unwrap();
-    write!(stdout, "\n");
-
-    *counter += 1;
-}
-
-static executor: Executor = Executor::new();
-static channel: Channel<u32> = Channel::new(&executor);
+static TOGGLE_CHANNEL: Channel<Option<bool>> = Channel::new();
+static REQUEST_CHANNEL: Channel<()> = Channel::new();
+static RAW_DATA_CHANNEL: Channel<u32> = Channel::new();
+static COMPUTED_DATA_CHANNEL: Channel<u32> = Channel::new();
 
 #[entry]
 fn main() -> ! {
@@ -91,24 +107,38 @@ fn main() -> ! {
     syst.enable_interrupt();
     syst.enable_counter();
 
-    static fizzer_data: SafeCell<FizzerData> = SafeCell::new(FizzerData { counter: 0 });
-    static fizzer: Tasklet<FizzerData, u32> = Tasklet::new(&fizzer_data, fizzer_fn, 4);
-    channel.register_task(&fizzer);
+    static requester_data: SafeCell<RequesterData> = SafeCell::new(RequesterData {
+        do_work: true,
+        request_channel: &REQUEST_CHANNEL,
+    });
+    static requester: Tasklet<RequesterData, Option<bool>> =
+        Tasklet::new(&requester_data, requester_fn, 1);
+    TOGGLE_CHANNEL.register_task(&requester);
 
-    static buzzer_data: SafeCell<BuzzerData> = SafeCell::new(BuzzerData { counter: 0 });
-    static buzzer: Tasklet<BuzzerData, u32> = Tasklet::new(&buzzer_data, buzzer_fn, 3);
-    channel.register_task(&buzzer);
+    static container_data: SafeCell<ContainerData> = SafeCell::new(ContainerData {
+        counter: 0,
+        raw_data_channel: &RAW_DATA_CHANNEL,
+    });
+    static container: Tasklet<ContainerData, ()> = Tasklet::new(&container_data, container_fn, 2);
+    REQUEST_CHANNEL.register_task(&container);
 
-    static stubber_data: SafeCell<StubberData> = SafeCell::new(StubberData { counter: 0 });
-    static stubber: Tasklet<StubberData, u32> = Tasklet::new(&stubber_data, stubber_fn, 2);
-    channel.register_task(&stubber);
+    static computronix_data: SafeCell<ComputronixData> = SafeCell::new(ComputronixData {
+        raw_data_counter: 0,
+        raw_data: [0; 4],
+        computed_data_channel: &COMPUTED_DATA_CHANNEL,
+    });
+    static computronix: Tasklet<ComputronixData, u32> =
+        Tasklet::new(&computronix_data, computronix_fn, 3);
+    RAW_DATA_CHANNEL.register_task(&computronix);
 
-    static newliner_data: SafeCell<NewlinerData> = SafeCell::new(NewlinerData { counter: 0 });
-    static newliner: Tasklet<NewlinerData, u32> = Tasklet::new(&newliner_data, newliner_fn, 1);
-    channel.register_task(&newliner);
+    static receiver_data: SafeCell<ReceiverData> = SafeCell::new(ReceiverData {
+        sum: 0,
+        toggle_channel: &TOGGLE_CHANNEL,
+    });
+    static receiver: Tasklet<ReceiverData, u32> = Tasklet::new(&receiver_data, receiver_fn, 4);
+    COMPUTED_DATA_CHANNEL.register_task(&receiver);
 
-    channel.send_data(1);
-
+    let mut executor = Executor::new([&requester, &container, &computronix, &receiver]);
     executor.start();
 
     debug::exit(debug::EXIT_SUCCESS);
@@ -118,8 +148,5 @@ fn main() -> ! {
 
 #[exception]
 fn SysTick() {
-    static mut val: u32 = 1;
-
-    *val += 1;
-    channel.send_data(*val);
+    TOGGLE_CHANNEL.send_data(None);
 }
